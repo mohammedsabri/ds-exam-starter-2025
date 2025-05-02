@@ -10,9 +10,11 @@ const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   try {
-    // Extract path parameters and query string parameters
+    // Extract path parameters
     const role = event.pathParameters?.role;
     const movieId = event.pathParameters?.movieId;
+    
+    // Extract verbose query parameter (PART B addition)
     const verbose = event.queryStringParameters?.verbose === 'true';
 
     if (!role || !movieId) {
@@ -40,8 +42,9 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       };
     }
 
-    // If verbose is true, get all crew members for the movie
+    // PART B: Check if verbose mode is requested
     if (verbose) {
+      // Get ALL crew members for the movie when verbose=true
       const params = {
         TableName: TABLE_NAME,
         KeyConditionExpression: 'movieId = :movieId',
@@ -64,7 +67,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       };
     } else {
-      // Otherwise, get only the specific crew member by role
+      // Original Part A: Get only the specific crew member by role
       const params = {
         TableName: TABLE_NAME,
         Key: {

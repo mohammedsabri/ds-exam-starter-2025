@@ -65,7 +65,7 @@ export class ExamStack extends cdk.Stack {
             [table.tableName]: generateBatch(movieCrew),
           },
         },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"), //.of(Date.now().toString()),
+        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"),
       },
       policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [table.tableArn],
@@ -91,7 +91,7 @@ export class ExamStack extends cdk.Stack {
     const moviesResource = roleResource.addResource("movies");
     const movieIdResource = moviesResource.addResource("{movieId}");
     
-    // Set up the GET method for the crew by role and movie ID endpoint
+    // PART B: Updated to explicitly configure the verbose query parameter
     movieIdResource.addMethod(
       "GET",
       new apig.LambdaIntegration(crewLambda, {
@@ -100,7 +100,32 @@ export class ExamStack extends cdk.Stack {
       {
         requestParameters: {
           "method.request.querystring.verbose": false, // Make verbose parameter optional
-        }
+        },
+        // Document the API to show it accepts a verbose parameter
+        methodResponses: [
+          {
+            statusCode: "200",
+            responseModels: {
+              "application/json": apig.Model.EMPTY_MODEL,
+            },
+            responseParameters: {
+              "method.response.header.Content-Type": true,
+              "method.response.header.Access-Control-Allow-Origin": true,
+            },
+          },
+          {
+            statusCode: "400",
+            responseModels: {
+              "application/json": apig.Model.ERROR_MODEL,
+            },
+          },
+          {
+            statusCode: "404",
+            responseModels: {
+              "application/json": apig.Model.ERROR_MODEL,
+            },
+          },
+        ],
       }
     );
 
