@@ -17,9 +17,8 @@ import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 export class ExamStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
+    
     // Question 1 - Serverless REST API
-
     // A table that stores data about a movie's crew, i.e. director, camera operators, etc.
     const table = new dynamodb.Table(this, "MoviesTable", {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -40,6 +39,22 @@ export class ExamStack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
+
+    // Add Lambda for handling crew API requests
+    const crewLambda = new lambdanode.NodejsFunction(this, "CrewLambdaFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: `${__dirname}/../lambdas/crewHandler.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: table.tableName,
+        REGION: "eu-west-1",
+      },
+    });
+
+    // Grant permissions for the Lambda to read from the DynamoDB table
+    table.grantReadData(crewLambda);
 
     new custom.AwsCustomResource(this, "moviesddbInitData", {
       onCreate: {
@@ -70,52 +85,29 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
+    // Create the crew API resource and endpoints
+    const crewResource = api.root.addResource("crew");
+    const roleResource = crewResource.addResource("{role}");
+    const moviesResource = roleResource.addResource("movies");
+    const movieIdResource = moviesResource.addResource("{movieId}");
+    
+    // Set up the GET method for the crew by role and movie ID endpoint
+    movieIdResource.addMethod(
+      "GET",
+      new apig.LambdaIntegration(crewLambda, {
+        requestTemplates: { "application/json": '{ "statusCode": "200" }' }
+      }),
+      {
+        requestParameters: {
+          "method.request.querystring.verbose": false, // Make verbose parameter optional
+        }
+      }
+    );
+
+    // Add other API endpoints and resources as needed...
     const anEndpoint = api.root.addResource("patha");
-
-
-    // ==================================
-    // Question 2 - Event-Driven architecture
-
-     const bucket = new s3.Bucket(this, "exam-bucket", {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      publicReadAccess: false,
-    });
-
-    const topic1 = new sns.Topic(this, "Topic1", {
-      displayName: "Exam topic",
-    });
     
-    const queueB = new sqs.Queue(this, "QueueB", {
-      receiveMessageWaitTime: cdk.Duration.seconds(5),
-    });
-
-    const queueA = new sqs.Queue(this, "queueA", {
-      receiveMessageWaitTime: cdk.Duration.seconds(5),
-    });
-    
-    const lambdaXFn = new lambdanode.NodejsFunction(this, "LambdaXFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_22_X,
-      entry: `${__dirname}/../lambdas/lambdaX.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        REGION: "eu-west-1",
-      },
-    });
-
-    const lambdaYFn = new lambdanode.NodejsFunction(this, "LambdaYFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_22_X,
-      entry: `${__dirname}/../lambdas/lambdaY.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        REGION: "eu-west-1",
-      },
-    });
-    
+    // Grant table permissions to all lambdas that need it
+    table.grantReadWriteData(question1Fn);
   }
 }
-  
