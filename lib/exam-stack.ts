@@ -17,6 +17,7 @@ import * as subs from "aws-cdk-lib/aws-sns-subscriptions";
 export class ExamStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
     
     // Question 1 - Serverless REST API
     // A table that stores data about a movie's crew, i.e. director, camera operators, etc.
@@ -131,8 +132,91 @@ export class ExamStack extends cdk.Stack {
 
     // Add other API endpoints and resources as needed...
     const anEndpoint = api.root.addResource("patha");
+
+// ==================================
+    // Question 2 - Event-Driven architecture
+
+
+
+
+    const bucket = new s3.Bucket(this, "exam-bucket", {
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      publicReadAccess: false,
+    });
+
+     // Create SNS Topics
+    const topic1 = new sns.Topic(this, "Topic1", {
+      displayName: "Topic 1",
+      topicName: "exam-topic-1",
+    });
+
+    const topic2 = new sns.Topic(this, "Topic2", {
+      displayName: "Topic 2",
+      topicName: "exam-topic-2",
+    });
+
+        // Create SQS Queues
+        const queueA = new sqs.Queue(this, "QueueA", {
+          queueName: "exam-queue-a",
+          visibilityTimeout: cdk.Duration.seconds(30),
+        });
+        const queueB = new sqs.Queue(this, "QueueB", {
+          queueName: "exam-queue-b",
+          visibilityTimeout: cdk.Duration.seconds(30),
+        });
     
-    // Grant table permissions to all lambdas that need it
-    table.grantReadWriteData(question1Fn);
+    // const queueB = new sqs.Queue(this, "QueueB", {
+    //   receiveMessageWaitTime: cdk.Duration.seconds(5),
+    // });
+
+    // const queueA = new sqs.Queue(this, "queueA", {
+    //   receiveMessageWaitTime: cdk.Duration.seconds(5),
+    // });
+    
+    const lambdaXFn = new lambdanode.NodejsFunction(this, "LambdaXFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: `${__dirname}/../lambdas/lambdaX.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        REGION: "eu-west-1",
+      },
+    });
+
+    const lambdaYFn = new lambdanode.NodejsFunction(this, "LambdaYFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: `${__dirname}/../lambdas/lambdaY.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        REGION: "eu-west-1",
+      },
+    });
+    // Connect SNS Topics to SQS Queues
+    // For now, basic connections. We'll add filtering in Part B
+    topic1.addSubscription(new subs.SqsSubscription(queueA));
+    topic2.addSubscription(new subs.SqsSubscription(queueB));
+    
+    // Connect SQS Queues to Lambda functions
+    lambdaXFn.addEventSource(new events.SqsEventSource(queueA));
+    lambdaYFn.addEventSource(new events.SqsEventSource(queueB));
+
+    // Grant permissions for Lambda A to publish to Topic 2
+    topic2.grantPublish(lambdaXFn); 
+
+    // Output the Topic ARN for use with the AWS CLI
+    new cdk.CfnOutput(this, "Topic1Arn", {
+      value: topic1.topicArn,
+      description: "The ARN of Topic 1",
+      exportName: "ExamTopic1Arn",
+    });
+    
+    
   }
-}
+    
+ 
+  }
+
