@@ -155,6 +155,18 @@ export class ExamStack extends cdk.Stack {
       displayName: "Topic 2",
       topicName: "exam-topic-2",
     });
+      
+    // Create S3 Event Notification
+    bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+
+      new s3n.LambdaDestination(s3Lambda),
+      {
+        prefix: "exam/",
+        suffix: ".json",
+      }
+    );
+
 
         // Create SQS Queues
         const queueA = new sqs.Queue(this, "QueueA", {
@@ -166,14 +178,27 @@ export class ExamStack extends cdk.Stack {
           visibilityTimeout: cdk.Duration.seconds(30),
         });
     
-    // const queueB = new sqs.Queue(this, "QueueB", {
-    //   receiveMessageWaitTime: cdk.Duration.seconds(5),
-    // });
-
-    // const queueA = new sqs.Queue(this, "queueA", {
-    //   receiveMessageWaitTime: cdk.Duration.seconds(5),
-    // });
+    // Create Lambda function for processing S3 events
+    const s3Lambda = new lambdanode.NodejsFunction(this, "S3LambdaFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: `${__dirname}/../lambdas/s3Handler.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        REGION: "eu-west-1",
+        TOPIC_ARN: topic1.topicArn,
+      },
+    });
     
+    // Grant permissions for Lambda to publish to Topic 1
+    topic1.grantPublish(s3Lambda);
+    // Grant permissions for Lambda to read from the S3 bucket
+    bucket.grantRead(s3Lambda);
+    // Grant permissions for Lambda to write to the SQS queues
+    queueA.grantSendMessages(s3Lambda);
+    queueB.grantSendMessages(s3Lambda);
+
     const lambdaXFn = new lambdanode.NodejsFunction(this, "LambdaXFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -200,9 +225,20 @@ export class ExamStack extends cdk.Stack {
       filterPolicy: {
         "address.country": sns.SubscriptionFilter.stringFilter({
           allowlist: ["Ireland", "China"]
-        })
+        }),
+        "email": sns.SubscriptionFilter.existsFilter()
+      },
+    }));  
+
+    topic1.addSubscription(new subs.SqsSubscription(queueB, {
+      filterPolicy: {
+        "address.country": sns.SubscriptionFilter.stringFilter({
+          allowlist: ["Ireland", "China"]
+        }),
+        "email": sns.SubscriptionFilter.existsFilter()
       },
     }));
+
 
     topic2.addSubscription(new subs.SqsSubscription(queueB));
     
