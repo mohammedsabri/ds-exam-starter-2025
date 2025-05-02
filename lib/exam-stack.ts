@@ -196,8 +196,14 @@ export class ExamStack extends cdk.Stack {
       },
     });
     // Connect SNS Topics to SQS Queues
-    // For now, basic connections. We'll add filtering in Part B
-    topic1.addSubscription(new subs.SqsSubscription(queueA));
+    topic1.addSubscription(new subs.SqsSubscription(queueA, {
+      filterPolicy: {
+        "address.country": sns.SubscriptionFilter.stringFilter({
+          allowlist: ["Ireland", "China"]
+        })
+      },
+    }));
+
     topic2.addSubscription(new subs.SqsSubscription(queueB));
     
     // Connect SQS Queues to Lambda functions
